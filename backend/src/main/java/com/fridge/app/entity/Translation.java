@@ -3,13 +3,13 @@ package com.fridge.app.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import lombok.AccessLevel;
-import lombok.Setter;
+import lombok.Setter; // Import Setter
 
 @Entity
 @Table(name = "translation")
 @Getter
-@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Setter 
+@NoArgsConstructor 
 public class Translation extends BaseTimeEntity {
 
     @Id
@@ -23,8 +23,10 @@ public class Translation extends BaseTimeEntity {
     @Column(name = "translated_word", nullable = false)
     private String translatedWord;
 
-    @Setter // Used by the Word class's addTranslation helper method.
-    @ManyToOne(fetch = FetchType.LAZY) // Use Lazy loading for performance.
-    @JoinColumn(name = "word_id", nullable = false) // This is the Foreign Key column ('word_id').
+    @Column(name = "example_sentence") // Added for AI features
+    private String exampleSentence;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "word_id", nullable = false)
     private Word word;
 }

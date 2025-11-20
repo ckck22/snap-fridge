@@ -2,11 +2,13 @@ import { useState, useRef } from 'react';
 import { StyleSheet, Text, View, Button, Image, ActivityIndicator, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
 import { CameraView, useCameraPermissions, CameraCapturedPicture } from 'expo-camera';
 import axios from 'axios';
+import * as Speech from 'expo-speech';
 
-// 1. Quiz Data Structure (Backend Response)
+// --- Type Definitions ---
 interface Translation {
   languageCode: string;
   translatedWord: string;
+  exampleSentence: string;
 }
 
 interface QuizItem {
@@ -15,7 +17,6 @@ interface QuizItem {
   translations: Translation[];
 }
 
-// 2. Define types for 'any' related errors
 interface AxiosErrorResponse {
   response?: {
     data?: string;
@@ -24,42 +25,32 @@ interface AxiosErrorResponse {
 }
 
 export default function App() {
-  // Camera permissions
   const [permission, requestPermission] = useCameraPermissions();
-
-  // State for camera reference
   const cameraRef = useRef<CameraView>(null);
-
-  // State for the captured photo
+  
+  // State
   const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
-
-  // State for loading status
   const [loading, setLoading] = useState(false);
-
-  // State for quiz data received from the backend
   const [quizData, setQuizData] = useState<QuizItem[] | null>(null);
+  const [targetLang, setTargetLang] = useState<string | null>(null);
 
-  // 1. Handle Permissions
-  if (!permission) {
-    // Camera permissions are still loading
-    return <View />;
-  }
+  // Permissions
+  if (!permission) return <View />;
   if (!permission.granted) {
-    // Camera permissions are not granted yet
     return (
       <View style={styles.container}>
-        <Text style={{ textAlign: 'center' }}>We need your permission to show the camera</Text>
-        <Button onPress={requestPermission} title="grant permission" />
+        <Text style={{ textAlign: 'center', marginTop: 50 }}>We need camera permission</Text>
+        <Button onPress={requestPermission} title="Grant Permission" />
       </View>
     );
   }
 
-  // 2. Function to take a picture
+  // --- Actions ---
   const takePicture = async () => {
     if (cameraRef.current) {
       try {
         const data = await cameraRef.current.takePictureAsync({
-          quality: 0.5, // Compress image to reduce upload time
+          quality: 0.5,
           base64: false,
         });
         setPhoto(data);
@@ -69,79 +60,140 @@ export default function App() {
     }
   };
 
-  // 3. Function to upload image to Spring Boot backend
   const generateQuiz = async () => {
-    if (!photo) return;
+    if (!photo || !targetLang) return;
 
     setLoading(true);
-
-    // Prepare the form data
     const formData = new FormData();
     formData.append('image', {
       uri: photo.uri,
-      name: 'fridge_photo.jpg',
+      name: 'fridge.jpg',
       type: 'image/jpeg',
     } as any);
+    
+    formData.append('targetLang', targetLang);
 
     try {
-      // Replace 'localhost' with your computer's IP address if testing on a real device.
-      // For iOS Simulator, 'localhost' usually works. 
-      // For Android Emulator, use '10.0.2.2'.
-      const BACKEND_URL = 'http://192.168.86.25:8080/api/quiz/generate';
+      // ⚠️ IP 주소 확인! (http://내컴퓨터IP:8080...)
+      const BACKEND_URL = 'http://192.168.86.25:8080/api/quiz/generate'; 
       
-      console.log("Sending request to:", BACKEND_URL);
-
+      console.log(`Sending to ${BACKEND_URL} with lang=${targetLang}`);
+      
       const response = await axios.post(BACKEND_URL, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
+        headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      console.log("Response received:", response.data);
+      console.log("📦 Data received:", JSON.stringify(response.data, null, 2));
       setQuizData(response.data);
-
-    } catch (err) { 
-      const error = err as AxiosErrorResponse; 
-      console.error("Error generating quiz:", error);
+    } catch (err) {
+      const error = err as AxiosErrorResponse;
+      console.error("Error:", error);
       alert("Error: " + (error.response?.data || error.message));
     } finally {
       setLoading(false);
     }
   };
 
-  // 4. Reset to camera view
+  // ✨ [TTS] 듣기 함수 추가
+  const playAudio = (text: string, language: string) => {
+    // 언어 코드 보정 (Google API 언어 코드 -> TTS 언어 코드)
+    // 예: 'ko' -> 'ko-KR', 'en' -> 'en-US'
+    let speechLang = language;
+    if (language === 'ko') speechLang = 'ko-KR';
+    if (language === 'en') speechLang = 'en-US';
+    if (language === 'es') speechLang = 'es-ES';
+    if (language === 'fr') speechLang = 'fr-FR';
+    if (language === 'de') speechLang = 'de-DE';
+
+    Speech.speak(text, {
+      language: speechLang,
+      pitch: 1.0,
+      rate: 0.9,
+    });
+  };
+
   const reset = () => {
     setPhoto(null);
     setQuizData(null);
   };
 
-  // --- RENDER ---
+  const goBackToHome = () => {
+    setTargetLang(null);
+    reset();
+  };
 
-  // If we have quiz data, show the Quiz Screen
+  // --- Render ---
+
+  // 1. Language Selection
+  if (!targetLang) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <Text style={styles.header}>🌍 Choose Language</Text>
+          <Text style={styles.subHeader}>What do you want to learn?</Text>
+          
+          <View style={styles.langButtonContainer}>
+            <Button title="🇪🇸 Spanish" onPress={() => setTargetLang('es')} />
+            <View style={{height: 10}} />
+            <Button title="🇫🇷 French" onPress={() => setTargetLang('fr')} />
+            <View style={{height: 10}} />
+            <Button title="🇩🇪 German" onPress={() => setTargetLang('de')} />
+            <View style={{height: 10}} />
+            <Button title="🇰🇷 Korean" onPress={() => setTargetLang('ko')} />
+            <View style={{height: 10}} />
+            <Button title="🇺🇸 English" onPress={() => setTargetLang('en')} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // 3. Result Screen (Flashcards)
   if (quizData) {
     return (
       <SafeAreaView style={styles.container}>
         <ScrollView contentContainerStyle={styles.resultContainer}>
-          <Text style={styles.header}>✨ Your Fridge Quiz ✨</Text>
+          <Text style={styles.header}>✨ Learning Time ✨</Text>
           {quizData.map((item, index) => (
             <View key={index} style={styles.card}>
               <Text style={styles.labelEn}>{item.labelEn}</Text>
-              <Text style={styles.nameKo}>({item.nameKo})</Text>
               <View style={styles.separator} />
+              
               {item.translations.map((t, tIndex) => (
-                <Text key={tIndex} style={styles.translation}>
-                  {t.languageCode.toUpperCase()}: {t.translatedWord}
-                </Text>
+                <View key={tIndex}>
+                  <View style={styles.translationRow}>
+                    <Text style={styles.translation}>
+                      {t.languageCode.toUpperCase()}: {t.translatedWord}
+                    </Text>
+                    <TouchableOpacity 
+                      onPress={() => playAudio(t.translatedWord, t.languageCode)}
+                      style={styles.audioButton}
+                    >
+                      <Text style={{fontSize: 20}}>🔊</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity onPress={() => playAudio(t.exampleSentence, t.languageCode)}>
+                    <Text style={styles.sentence}>"{t.exampleSentence}"</Text>
+                    <Text style={styles.hint}>(Tap sentence to listen)</Text>
+                  </TouchableOpacity>
+                </View>
               ))}
             </View>
           ))}
-          <Button title="Scan Again" onPress={reset} />
+          
+          <View style={styles.buttonGroup}>
+            <Button title="Scan Another Item" onPress={reset} />
+            <View style={{marginTop: 10}}>
+               <Button title="Change Language" onPress={goBackToHome} color="gray" />
+            </View>
+          </View>
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // If photo is taken but not uploaded yet (Preview Screen)
+  // 2. Camera Preview
   if (photo) {
     return (
       <View style={styles.container}>
@@ -152,7 +204,7 @@ export default function App() {
           ) : (
             <>
               <Button title="Retake" onPress={() => setPhoto(null)} />
-              <Button title="Generate Quiz" onPress={generateQuiz} />
+              <Button title={`Generate (${targetLang?.toUpperCase()})`} onPress={generateQuiz} />
             </>
           )}
         </View>
@@ -160,7 +212,7 @@ export default function App() {
     );
   }
 
-  // Default: Camera Screen
+  // Live Camera
   return (
     <View style={styles.container}>
       <CameraView style={styles.camera} ref={cameraRef}>
@@ -170,23 +222,35 @@ export default function App() {
           </TouchableOpacity>
         </View>
       </CameraView>
+      <SafeAreaView style={{backgroundColor: 'transparent'}}>
+         <Button title="Back to Language" onPress={() => setTargetLang(null)} color="white" />
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   camera: { flex: 1 },
   buttonContainer: { flex: 1, flexDirection: 'row', backgroundColor: 'transparent', margin: 64 },
   button: { flex: 1, alignSelf: 'flex-end', alignItems: 'center', backgroundColor: 'white', padding: 15, borderRadius: 10 },
   text: { fontSize: 24, fontWeight: 'bold', color: 'black' },
   preview: { flex: 1 },
-  controls: { flexDirection: 'row', justifyContent: 'space-around', padding: 20 },
-  resultContainer: { padding: 20 },
-  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
-  card: { backgroundColor: '#f9f9f9', padding: 15, borderRadius: 10, marginBottom: 15, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
-  labelEn: { fontSize: 22, fontWeight: 'bold', color: '#333' },
-  nameKo: { fontSize: 16, color: '#666', marginBottom: 10 },
-  separator: { height: 1, backgroundColor: '#eee', marginVertical: 5 },
-  translation: { fontSize: 18, color: '#007AFF' },
+  controls: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, paddingBottom: 40 },
+  resultContainer: { padding: 20, paddingBottom: 100, flexGrow: 1, backgroundColor: '#f5f5f5' },
+  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 10, textAlign: 'center', marginTop: 20, color: '#333' },
+  subHeader: { fontSize: 18, color: '#666', marginBottom: 30 },
+  langButtonContainer: { width: '60%' },
+  card: { backgroundColor: '#ffffff', padding: 20, borderRadius: 15, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3, borderWidth: 1, borderColor: '#ddd' },
+  labelEn: { fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' },
+  separator: { height: 1, backgroundColor: '#eee', marginVertical: 10 },
+  
+  translationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 5 },
+  translation: { fontSize: 22, color: '#007AFF', fontWeight: '600', textAlign: 'center' },
+  audioButton: { marginLeft: 10, padding: 5, backgroundColor: '#f0f0f0', borderRadius: 20 },
+  
+  sentence: { fontSize: 16, color: '#555', fontStyle: 'italic', textAlign: 'center', marginTop: 5 },
+  hint: { fontSize: 12, color: '#999', textAlign: 'center', marginTop: 2 },
+  buttonGroup: { marginBottom: 30 }
 });

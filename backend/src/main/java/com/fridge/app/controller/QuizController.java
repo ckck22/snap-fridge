@@ -11,41 +11,43 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
-// @RestController: This tells Spring that this class is a Controller
-// and that its methods will return JSON responses (not HTML).
+// @RestController: Indicates that this class handles REST API requests and returns JSON.
 @RestController
-// @RequestMapping("/api"): Sets a base URL for all methods in this controller.
-// So, our endpoint will be "/api" + "/quiz/generate".
 @RequestMapping("/api")
-// @RequiredArgsConstructor: Automatically injects the QuizService.
-@RequiredArgsConstructor
+@RequiredArgsConstructor // Automatically injects the final QuizService.
 public class QuizController {
 
     private final QuizService quizService;
 
-    // @PostMapping: This method handles HTTP POST requests.
-    // It listens at the URL "/quiz/generate" (combined with "/api" from above).
+    /**
+     * Endpoint to generate a quiz from an uploaded image.
+     * * @param imageFile  The photo taken by the user.
+     * @param targetLang The language code the user wants to learn (e.g., "es", "fr", "de").
+     * Defaults to "es" (Spanish) if not provided.
+     */
     @PostMapping("/quiz/generate")
     public ResponseEntity<?> generateQuiz(
-            // @RequestParam("image"): Expects a file in the request part named "image".
-            // This is what React Native will need to name its file upload.
-            @RequestParam("image") MultipartFile imageFile) {
+            @RequestParam("image") MultipartFile imageFile,
+            @RequestParam(value = "targetLang", defaultValue = "es") String targetLang) {
 
-        // Basic check to see if the file is empty.
+        // 1. Basic validation: Check if the file is empty.
         if (imageFile.isEmpty()) {
             return ResponseEntity.badRequest().body("Image file is empty.");
         }
 
         try {
-            // 1. Pass the file to the service to get the list of quiz questions.
-            List<QuizQuestionDto> quiz = quizService.generateQuizFromImage(imageFile);
+            System.out.println("📷 Received image. Target Language: " + targetLang);
 
-            // 2. Return the list of DTOs as a JSON array with a 200 OK status.
+            // 2. Call the Service to process the image and get quiz data.
+            // We pass the 'targetLang' so the service knows what language to ask Gemini for.
+            List<QuizQuestionDto> quiz = quizService.generateQuizFromImage(imageFile, targetLang);
+
+            // 3. Return the list of quiz questions with a 200 OK status.
             return ResponseEntity.ok(quiz);
 
         } catch (IOException e) {
-            // Handle error if image processing fails (e..g, bad file)
-            e.printStackTrace(); // Log the error to the console
+            // Handle IO errors (e.g., file processing issues).
+            e.printStackTrace();
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body("Error processing image: " + e.getMessage());
@@ -54,7 +56,7 @@ public class QuizController {
             e.printStackTrace();
             return ResponseEntity
                     .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred.");
+                    .body("An unexpected error occurred: " + e.getMessage());
         }
     }
 }
