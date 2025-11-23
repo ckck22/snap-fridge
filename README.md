@@ -98,7 +98,6 @@ graph LR
 ## 🗂️ Database Architecture
 
 The application uses a relational database design normalized to handle multilingual data and tracking logic efficiently.
-
 ```mermaid
 erDiagram
     WORD {
@@ -128,11 +127,9 @@ erDiagram
         datetime next_review_date "Calculated via SRS Algorithm"
     }
 
-    %% Relationships
     WORD ||--o{ TRANSLATION : "1:N (Supports Multi-Language)"
     WORD ||--|| LEARNING_PROGRESS : "1:1 (Tracks User Progress)"
-
----
+```
 
 ## 🚀 Getting Started
 
