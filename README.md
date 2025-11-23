@@ -131,6 +131,9 @@ erDiagram
     WORD ||--|| LEARNING_PROGRESS : "1:1 (Tracks User Progress)"
 ```
 
+---
+
+
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
