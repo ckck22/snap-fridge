@@ -95,6 +95,45 @@ graph LR
 
 ---
 
+## 🗂️ Database Architecture
+
+The application uses a relational database design normalized to handle multilingual data and tracking logic efficiently.
+
+```mermaid
+erDiagram
+    WORD {
+        bigint word_id PK "Primary Key"
+        varchar label_en "English Label (Vision API)"
+        varchar name_ko "Native Definition"
+        varchar image_path "User Image File Path"
+        datetime created_at
+        datetime updated_at
+    }
+
+    TRANSLATION {
+        bigint translation_id PK
+        bigint word_id FK "Foreign Key -> WORD"
+        varchar language_code "Target Lang (es, fr, etc.)"
+        varchar translated_word "Translated Text"
+        varchar example_sentence "Context-Aware Sentence"
+        varchar emoji "Visual Representation"
+    }
+
+    LEARNING_PROGRESS {
+        bigint progress_id PK
+        bigint word_id FK "Foreign Key -> WORD"
+        int proficiency_level "Gamification Level (1-5)"
+        int review_count "Total Reviews"
+        datetime last_reviewed_at "Tracks Freshness State"
+        datetime next_review_date "Calculated via SRS Algorithm"
+    }
+
+    %% Relationships
+    WORD ||--o{ TRANSLATION : "1:N (Supports Multi-Language)"
+    WORD ||--|| LEARNING_PROGRESS : "1:1 (Tracks User Progress)"
+
+---
+
 ## 🚀 Getting Started
 
 ### 1. Prerequisites
