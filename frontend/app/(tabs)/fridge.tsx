@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Dimensions, Image, Animated, Easing } from 'react-native';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { StyleSheet, Text, View, FlatList, ActivityIndicator, TouchableOpacity, RefreshControl, Modal, Dimensions, Image, Animated } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import axios from 'axios';
 import { useFocusEffect } from 'expo-router';
@@ -12,7 +12,7 @@ interface WordBankItem {
   labelEn: string;
   nativeDefinition: string;
   proficiencyLevel: number;
-  needsReview: boolean;
+  freshness: 'FRESH' | 'WARNING' | 'ROTTEN'; // ✨ 신선도 상태
   languageCode: string;
   translatedWord: string;
   exampleSentence: string;
@@ -22,7 +22,25 @@ interface WordBankItem {
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 40) / 2;
-const DOOR_WIDTH = width / 2;
+
+// 🪰 파리 애니메이션 컴포넌트
+const Flies = () => {
+  const anim = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, { toValue: 10, duration: 200, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: -10, duration: 200, useNativeDriver: true }),
+        Animated.timing(anim, { toValue: 0, duration: 200, useNativeDriver: true }),
+      ])
+    ).start();
+  }, []);
+  return (
+    <Animated.View style={{ position: 'absolute', top: -10, right: -10, transform: [{ translateX: anim }] }}>
+      <Text style={{ fontSize: 24 }}>🪰</Text>
+    </Animated.View>
+  );
+};
 
 export default function FridgeScreen() {
   const [items, setItems] = useState<WordBankItem[]>([]);
@@ -30,12 +48,13 @@ export default function FridgeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [selectedItem, setSelectedItem] = useState<WordBankItem | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
-  
-  // Animation State
-  const [isDoorOpen, setIsDoorOpen] = useState(false);
-  const leftDoorAnim = useRef(new Animated.Value(0)).current;
-  const rightDoorAnim = useRef(new Animated.Value(0)).current;
-  const contentOpacity = useRef(new Animated.Value(0)).current;
+
+  // ✨ XP 및 타이틀 계산
+  const totalXP = items.length * 50 + items.reduce((acc, item) => acc + (item.proficiencyLevel * 20), 0);
+  let userTitle = "🥚 Dorm Student"; // 자취생
+  let titleColor = "#555";
+  if (totalXP > 1000) { userTitle = "👨‍🍳 Master Chef"; titleColor = "#FFD700"; }
+  else if (totalXP > 200) { userTitle = "🍳 Home Cook"; titleColor = "#FF9800"; }
 
   // ⚠️ IP 확인
   const SERVER_URL = 'http://192.168.86.237:8080';
@@ -61,159 +80,131 @@ export default function FridgeScreen() {
     Speech.speak(text, { language: langMap[lang] || 'en-US' });
   };
 
-  const openCard = (item: WordBankItem) => {
-    setSelectedItem(item);
-    setModalVisible(true);
+  // ✨ 복습 완료 처리
+  const handleReviewComplete = async () => {
+    if (!selectedItem) return;
+    try {
+      // API 호출 (복습 처리)
+      await axios.post(`${SERVER_URL}/api/fridge/review/${selectedItem.wordId}`);
+      // 모달 닫고 새로고침
+      setModalVisible(false);
+      fetchFridgeItems();
+      alert("✨ Freshness Restored! XP Gained!");
+    } catch (error) {
+      alert("Review failed");
+    }
   };
 
-  // Open Animation
-  const openFridge = () => {
-    setIsDoorOpen(true);
-    Animated.parallel([
-      Animated.timing(leftDoorAnim, {
-        toValue: -DOOR_WIDTH,
-        duration: 1000,
-        useNativeDriver: true,
-        easing: Easing.bounce,
-      }),
-      Animated.timing(rightDoorAnim, {
-        toValue: DOOR_WIDTH,
-        duration: 1000,
-        useNativeDriver: true,
-        easing: Easing.bounce,
-      }),
-      Animated.timing(contentOpacity, {
-        toValue: 1,
-        duration: 800,
-        useNativeDriver: true,
-      }),
-    ]).start();
+  const renderItem = ({ item }: { item: WordBankItem }) => {
+    // 상태별 스타일
+    let statusColor = '#4CAF50'; // Fresh
+    let statusText = 'FRESH';
+    let bgColor = 'white';
+    
+    if (item.freshness === 'WARNING') {
+      statusColor = '#FF9800';
+      statusText = 'SOON';
+    } else if (item.freshness === 'ROTTEN') {
+      statusColor = '#8B4513'; // 갈색
+      statusText = 'ROTTEN';
+      bgColor = '#FBE9E7'; // 약간 썩은 배경색
+    }
+
+    return (
+      <TouchableOpacity 
+        style={[styles.card, { backgroundColor: bgColor, borderColor: statusColor, borderWidth: item.freshness === 'FRESH' ? 0 : 2 }]}
+        onPress={() => { setSelectedItem(item); setModalVisible(true); }}
+        activeOpacity={0.7}
+      >
+        {/* 상태 배지 */}
+        <View style={[styles.badge, { backgroundColor: statusColor }]}>
+          <Text style={styles.badgeText}>{statusText}</Text>
+        </View>
+
+        {/* 🪰 썩었으면 파리 꼬임 */}
+        {item.freshness === 'ROTTEN' && <Flies />}
+
+        {item.imagePath ? (
+          <Image source={{ uri: `${SERVER_URL}/images/${item.imagePath}` }} style={styles.foodImage} resizeMode="cover" />
+        ) : (
+          <Text style={styles.emoji}>{item.emoji || '📦'}</Text>
+        )}
+
+        <View style={styles.cardFooter}>
+          <Text style={styles.wordLabel} numberOfLines={1}>{item.nativeDefinition || item.labelEn}</Text>
+          <Text style={styles.subLabel} numberOfLines={1}>{item.labelEn}</Text>
+        </View>
+      </TouchableOpacity>
+    );
   };
-
-  // Close Animation
-  const closeFridge = () => {
-    setIsDoorOpen(false);
-    Animated.parallel([
-      Animated.timing(leftDoorAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      Animated.timing(rightDoorAnim, { toValue: 0, duration: 500, useNativeDriver: true }),
-      Animated.timing(contentOpacity, { toValue: 0, duration: 300, useNativeDriver: true }),
-    ]).start();
-  };
-
-  const renderItem = ({ item }: { item: WordBankItem }) => (
-    <TouchableOpacity 
-      style={[styles.card, item.needsReview && styles.cardReview]}
-      onPress={() => openCard(item)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.badge, { backgroundColor: item.needsReview ? '#FF5252' : '#E0E0E0' }]}>
-        <Text style={[styles.badgeText, { color: item.needsReview ? 'white' : '#555' }]}>
-          {item.needsReview ? '⚠️ ASAP' : `Lv.${item.proficiencyLevel}`}
-        </Text>
-      </View>
-
-      {/* 사진 vs 이모지 */}
-      {item.imagePath ? (
-        <Image 
-          source={{ uri: `${SERVER_URL}/images/${item.imagePath}` }} 
-          style={styles.foodImage}
-          resizeMode="cover"
-        />
-      ) : (
-        <Text style={styles.emoji}>{item.emoji || '📦'}</Text>
-      )}
-
-      <View style={styles.cardFooter}>
-        <Text style={styles.wordLabel} numberOfLines={1}>{item.nativeDefinition || item.labelEn}</Text>
-        <Text style={styles.subLabel} numberOfLines={1}>{item.labelEn}</Text>
-      </View>
-    </TouchableOpacity>
-  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      
-      {/* 1. Interior Content */}
-      <Animated.View style={{ flex: 1, opacity: contentOpacity }}>
-        <View style={styles.headerContainer}>
+      {/* ✨ 헤더: 레벨 및 XP 표시 */}
+      <View style={styles.headerContainer}>
+        <View>
           <Text style={styles.headerTitle}>My Fridge</Text>
-          <TouchableOpacity onPress={closeFridge}>
-             <Text style={styles.closeLink}>Close Door</Text>
-          </TouchableOpacity>
+          <Text style={[styles.rankTitle, { color: titleColor }]}>{userTitle}</Text>
         </View>
+        <View style={styles.xpContainer}>
+          <Text style={styles.xpText}>{totalXP} XP</Text>
+        </View>
+      </View>
 
-        {loading ? (
-          <ActivityIndicator size="large" color="#6200ee" style={{ marginTop: 50 }} />
-        ) : (
-          <FlatList
-            data={items}
-            renderItem={renderItem}
-            keyExtractor={(item) => item.wordId.toString()}
-            numColumns={2}
-            contentContainerStyle={styles.listContainer}
-            columnWrapperStyle={styles.columnWrapper}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-            ListEmptyComponent={<Text style={styles.emptyText}>Fridge is empty!</Text>}
-          />
-        )}
-      </Animated.View>
+      {loading ? (
+        <ActivityIndicator size="large" color="#6200ee" style={{ marginTop: 50 }} />
+      ) : (
+        <FlatList
+          data={items}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.wordId.toString()}
+          numColumns={2}
+          contentContainerStyle={styles.listContainer}
+          columnWrapperStyle={styles.columnWrapper}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          ListEmptyComponent={<Text style={styles.emptyText}>Fridge is empty!</Text>}
+        />
+      )}
 
-      {/* 2. Left Door */}
-      <Animated.View 
-        style={[
-          styles.door, 
-          styles.doorLeft, 
-          { transform: [{ translateX: leftDoorAnim }] }
-        ]}
-      >
-        <TouchableOpacity style={styles.doorTouchArea} onPress={openFridge} activeOpacity={0.9}>
-          <View style={styles.handleLeft} />
-          {/* ✨ [Removed] Tap to Open text removed here */}
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* 3. Right Door */}
-      <Animated.View 
-        style={[
-          styles.door, 
-          styles.doorRight, 
-          { transform: [{ translateX: rightDoorAnim }] }
-        ]}
-      >
-        <TouchableOpacity style={styles.doorTouchArea} onPress={openFridge} activeOpacity={0.9}>
-          <View style={styles.handleRight} />
-        </TouchableOpacity>
-      </Animated.View>
-
-      {/* Detail Modal */}
-      <Modal animationType="fade" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
+      {/* 상세 모달 */}
+      <Modal animationType="slide" transparent={true} visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             {selectedItem && (
               <>
                 <View style={styles.modalHeader}>
                   {selectedItem.imagePath ? (
-                     <Image source={{ uri: `${SERVER_URL}/images/${selectedItem.imagePath}` }} style={{width:100, height:100, borderRadius:10}} />
+                     <Image source={{ uri: `${SERVER_URL}/images/${selectedItem.imagePath}` }} style={{width:80, height:80, borderRadius:10}} />
                   ) : (
                      <Text style={styles.modalEmoji}>{selectedItem.emoji || '📦'}</Text>
                   )}
                   <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.closeBtn}>
-                    <Ionicons name="close" size={24} color="#333" />
+                    <Ionicons name="close" size={28} color="#333" />
                   </TouchableOpacity>
                 </View>
+
                 <Text style={styles.modalTitle}>{selectedItem.nativeDefinition || selectedItem.labelEn}</Text>
                 <Text style={styles.modalSubtitle}>{selectedItem.languageCode.toUpperCase()}: {selectedItem.translatedWord}</Text>
+
                 <TouchableOpacity style={styles.playRow} onPress={() => playAudio(selectedItem.translatedWord, selectedItem.languageCode)}>
-                  <Ionicons name="volume-high" size={20} color="#6200ee" />
-                  <Text style={styles.playText}>Listen Word</Text>
+                  <Ionicons name="volume-high" size={24} color="#6200ee" />
+                  <Text style={styles.playText}>Listen</Text>
                 </TouchableOpacity>
+
                 <View style={styles.divider} />
+                
                 <View style={styles.sentenceBox}>
                   <Text style={styles.sentenceText}>"{selectedItem.exampleSentence}"</Text>
-                  <TouchableOpacity style={styles.sentencePlayBtn} onPress={() => playAudio(selectedItem.exampleSentence, selectedItem.languageCode)}>
-                    <Text style={{color: 'white', fontWeight: 'bold'}}>Play Sentence</Text>
+                  <TouchableOpacity onPress={() => playAudio(selectedItem.exampleSentence, selectedItem.languageCode)}>
+                    <Text style={{color: '#6200ee', marginTop: 5, fontWeight: 'bold'}}>🔊 Listen Sentence</Text>
                   </TouchableOpacity>
                 </View>
+
+                {/* ✨ [New] 복습 완료 버튼 */}
+                <TouchableOpacity style={styles.reviewBtn} onPress={handleReviewComplete}>
+                  <Text style={styles.reviewBtnText}>✅ I Memorized This!</Text>
+                  <Text style={styles.reviewSubText}>+20 XP & Restore Freshness</Text>
+                </TouchableOpacity>
               </>
             )}
           </View>
@@ -224,53 +215,40 @@ export default function FridgeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#E3F2FD' },
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
   
-  // Door
-  door: {
-    position: 'absolute', top: 0, bottom: 0, width: DOOR_WIDTH,
-    backgroundColor: '#F5F5F5', borderWidth: 1, borderColor: '#ccc',
-    zIndex: 10, justifyContent: 'center', elevation: 5,
-    shadowColor: '#000', shadowOffset: {width:0, height:0}, shadowOpacity: 0.2, shadowRadius: 10
-  },
-  doorLeft: { left: 0, borderRightWidth: 2, borderRightColor: '#bbb' },
-  doorRight: { right: 0, borderLeftWidth: 0 },
-  doorTouchArea: { flex: 1, justifyContent: 'center', width: '100%' },
-  handleLeft: { position: 'absolute', right: 20, width: 15, height: 150, backgroundColor: '#ddd', borderRadius: 10, borderWidth: 1, borderColor: '#bbb' },
-  handleRight: { position: 'absolute', left: 20, width: 15, height: 150, backgroundColor: '#ddd', borderRadius: 10, borderWidth: 1, borderColor: '#bbb' },
-
-  // Interior
-  headerContainer: { paddingHorizontal: 20, paddingVertical: 15, flexDirection:'row', justifyContent:'space-between', alignItems:'center' },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: '#1A1A1A' },
-  headerSubtitle: { fontSize: 14, color: '#888', marginTop: 2 },
-  closeLink: { color: '#6200ee', fontWeight: 'bold' },
+  headerContainer: { paddingHorizontal: 20, paddingVertical: 15, backgroundColor: 'white', flexDirection:'row', justifyContent:'space-between', alignItems:'center', borderBottomWidth: 1, borderBottomColor: '#eee' },
+  headerTitle: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
+  rankTitle: { fontSize: 14, fontWeight: 'bold', marginTop: 2 },
+  xpContainer: { backgroundColor: '#E3F2FD', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20 },
+  xpText: { color: '#1976D2', fontWeight: 'bold' },
 
   listContainer: { padding: 15 },
   columnWrapper: { justifyContent: 'space-between' },
-  
-  card: { width: CARD_WIDTH, backgroundColor: 'white', borderRadius: 20, padding: 15, marginBottom: 15, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
-  cardReview: { borderWidth: 2, borderColor: '#FF5252' },
+  card: { width: CARD_WIDTH, backgroundColor: 'white', borderRadius: 20, padding: 15, marginBottom: 15, alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, elevation: 3 },
   badge: { position: 'absolute', top: 10, right: 10, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  badgeText: { fontSize: 10, fontWeight: 'bold' },
+  badgeText: { fontSize: 10, fontWeight: 'bold', color: 'white' },
   emoji: { fontSize: 50, marginVertical: 10 },
   foodImage: { width: 80, height: 80, borderRadius: 10, marginVertical: 10 },
   cardFooter: { width: '100%', alignItems: 'center' },
-  wordLabel: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 2, textAlign: 'center' },
-  subLabel: { fontSize: 12, color: '#888', textAlign: 'center' },
-  emptyText: { fontSize: 20, fontWeight: 'bold', color: '#333', marginTop: 10, textAlign: 'center' },
-  
-  // Modal
+  wordLabel: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 2 },
+  subLabel: { fontSize: 12, color: '#888' },
+  emptyText: { textAlign: 'center', marginTop: 50, color: '#888' },
+
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
   modalContent: { width: '85%', backgroundColor: 'white', borderRadius: 25, padding: 25, alignItems: 'center', elevation: 10 },
   modalHeader: { width: '100%', alignItems: 'center', marginBottom: 10 },
   modalEmoji: { fontSize: 80 },
   closeBtn: { position: 'absolute', top: -10, right: -10, padding: 10 },
-  modalTitle: { fontSize: 32, fontWeight: '900', color: '#333', marginBottom: 5, textTransform: 'capitalize' },
+  modalTitle: { fontSize: 32, fontWeight: '900', color: '#333', marginBottom: 5 },
   modalSubtitle: { fontSize: 20, color: '#6200ee', fontWeight: '600', marginBottom: 20 },
-  playRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20 },
-  playText: { marginLeft: 5, color: '#6200ee', fontWeight: 'bold' },
+  playRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', paddingHorizontal: 20, paddingVertical: 12, borderRadius: 30 },
+  playText: { marginLeft: 10, color: '#6200ee', fontWeight: 'bold', fontSize: 18 },
   divider: { width: '100%', height: 1, backgroundColor: '#eee', marginVertical: 20 },
-  sentenceBox: { width: '100%', backgroundColor: '#f9f9f9', padding: 15, borderRadius: 15, alignItems: 'center' },
-  sentenceText: { fontSize: 16, color: '#555', fontStyle: 'italic', textAlign: 'center', marginBottom: 15, lineHeight: 22 },
-  sentencePlayBtn: { backgroundColor: '#6200ee', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 20 },
+  sentenceBox: { width: '100%', backgroundColor: '#f9f9f9', padding: 15, borderRadius: 15, alignItems: 'center', marginBottom: 20 },
+  sentenceText: { fontSize: 16, color: '#555', fontStyle: 'italic', textAlign: 'center' },
+  
+  reviewBtn: { width: '100%', backgroundColor: '#4CAF50', paddingVertical: 15, borderRadius: 15, alignItems: 'center', elevation: 3 },
+  reviewBtnText: { color: 'white', fontSize: 18, fontWeight: 'bold' },
+  reviewSubText: { color: 'rgba(255,255,255,0.8)', fontSize: 12, marginTop: 2 }
 });

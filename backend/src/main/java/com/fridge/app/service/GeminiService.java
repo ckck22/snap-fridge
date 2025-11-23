@@ -25,22 +25,33 @@ public class GeminiService {
     private final ObjectMapper objectMapper;
 
     /**
-     * [연구 주제 1] Semantic Filtering
-     * Vision API가 준 라벨 중에서 '음식'만 쏙 골라냅니다.
+     * 1. Semantic Filtering (Smart Labeling)
+     * Picks the best food name from Vision API labels.
+     * ✨ UPDATED: Now instructs AI to avoid botanical names (e.g., Cruciferous) 
+     * and prefer common grocery names (e.g., Cabbage).
      */
     public String extractFoodLabel(List<String> visionLabels) {
         String labelsString = String.join(", ", visionLabels);
-
+        
         String promptText = String.format(
-                "Analyze this list of image labels: [%s].\n" +
-                        "Identify the single most specific food ingredient or edible item visible.\n" +
-                        "Ignore general terms like 'Food', 'Produce', 'Dish', 'Ingredient', 'Recipe', 'Cuisine', 'Display device', 'Gadget'.\n"
-                        +
-                        "Return ONLY a JSON object: { \"foodLabel\": \"Name\" } or { \"foodLabel\": null } if none found.",
-                labelsString);
+            "Analyze this list of image labels from Google Vision: [%s].\n" +
+            "Your Goal: Identify the single most specific 'Common Grocery Store Item Name'.\n" +
+            "\n" +
+            "RULES:\n" +
+            "1. Ignore generic terms like 'Food', 'Produce', 'Vegetable', 'Ingredient', 'Dish', 'Recipe'.\n" +
+            "2. 🚫 STRICTLY AVOID botanical families or scientific categories.\n" +
+            "   - Example: Do NOT use 'Cruciferous vegetables', use 'Cabbage' or 'Broccoli'.\n" +
+            "   - Example: Do NOT use 'Citrus', use 'Lemon' or 'Orange'.\n" +
+            "   - Example: Do NOT use 'Nightshade', use 'Tomato'.\n" +
+            "3. If multiple specific items are listed, pick the most prominent one.\n" +
+            "4. If no food is found, return null.\n" +
+            "\n" +
+            "Return ONLY a JSON object: { \"foodLabel\": \"Name\" } or { \"foodLabel\": null }.", 
+            labelsString
+        );
 
         JsonNode response = callGemini(promptText);
-
+        
         if (response != null && response.has("foodLabel") && !response.get("foodLabel").isNull()) {
             return response.get("foodLabel").asText();
         }
@@ -48,45 +59,50 @@ public class GeminiService {
     }
 
     /**
-     * [연구 주제 2] Context-Aware Generation
-     * 사용자의 냉장고 속 재료(Context)를 고려해서 예문을 만듭니다.
+     * 2. Content Generation (Translation, Definition, Contextual Sentence)
+     * Uses user's native language and context items to create rich content.
      */
-    public JsonNode getTranslationAndSentence(String word, String targetLang, String nativeLang,
-            List<String> contextWords) {
-
-        String contextString = (contextWords == null || contextWords.isEmpty()) ? "None"
-                : String.join(", ", contextWords);
+    public JsonNode getTranslationAndSentence(String word, String targetLang, String nativeLang, List<String> contextWords) {
+        
+        String contextString = (contextWords == null || contextWords.isEmpty()) 
+            ? "None" 
+            : String.join(", ", contextWords);
 
         String promptText = String.format(
-                "You are a language teacher.\n" +
-                        "Vision Label (English): '%s'\n" +
-                        "Student's Native Language: %s\n" +
-                        "Target Language to Learn: %s\n" +
-                        "Context: [%s]\n" +
-                        "\n" +
-                        "Output JSON Requirements:\n" +
-                        "1. nativeDefinition: The word '%s' translated into the Student's Native Language (%s).\n" +
-                        "2. translatedWord: The word '%s' translated into the Target Language (%s).\n" +
-                        "3. exampleSentence: A simple sentence using the word in the Target Language (%s).\n" +
-                        "4. emoji: A matching emoji.\n" +
-                        "\n" +
-                        "Strict JSON: { \"nativeDefinition\": \"...\", \"translatedWord\": \"...\", \"exampleSentence\": \"...\", \"emoji\": \"...\" }",
-                word, nativeLang, targetLang, contextString,
-                word, nativeLang,
-                word, targetLang,
-                targetLang);
+            "You are a professional language teacher.\n" +
+            "User's Native Language: %s\n" +
+            "Target Language to Learn: %s\n" +
+            "Word to analyze: '%s'\n" +
+            "Context (User's Fridge): [%s]\n" +
+            "\n" +
+            "Task: Provide the following in JSON format:\n" +
+            "1. translatedWord: The word translated into the Target Language. (If Target is same as Word, keep it).\n" +
+            "2. nativeDefinition: The meaning of the word in the User's Native Language (%s).\n" +
+            "3. exampleSentence: A simple A1-level sentence in the Target Language (%s).\n" +
+            "   - Try to combine with context items ([%s]) if natural.\n" +
+            "   - MUST NOT be empty.\n" +
+            "4. emoji: A single representative emoji.\n" +
+            "\n" +
+            "STRICT JSON OUTPUT: { \"translatedWord\": \"...\", \"nativeDefinition\": \"...\", \"exampleSentence\": \"...\", \"emoji\": \"...\" }", 
+            nativeLang, targetLang, word, contextString, 
+            nativeLang, targetLang, contextString
+        );
 
         return callGemini(promptText);
     }
 
-    // Gemini API 호출 공통 메서드
+    /**
+     * Shared method to call Gemini API and parse JSON response safely.
+     */
     private JsonNode callGemini(String promptText) {
         GeminiRequest requestBody = new GeminiRequest(
-                List.of(new GeminiRequest.Content(
-                        List.of(new GeminiRequest.Part(promptText)))));
+            List.of(new GeminiRequest.Content(
+                List.of(new GeminiRequest.Part(promptText))
+            ))
+        );
 
         RestClient restClient = RestClient.create();
-
+        
         try {
             GeminiResponse response = restClient.post()
                     .uri(apiUrl + "?key=" + apiKey)
@@ -96,18 +112,23 @@ public class GeminiService {
 
             if (response != null && !response.getCandidates().isEmpty()) {
                 String jsonString = response.getCandidates().get(0).getContent().getParts().get(0).getText();
+                
+                // Debug Log
                 System.out.println("🤖 Raw Gemini Response: " + jsonString);
 
+                // Clean up markdown code blocks (e.g., ```json ... ```)
                 jsonString = jsonString.replaceAll("```json", "").replaceAll("```", "").trim();
+                
                 JsonNode rootNode = objectMapper.readTree(jsonString);
 
+                // Safety Check: Ensure exampleSentence is not empty or missing
                 if (rootNode instanceof ObjectNode) {
                     ObjectNode objNode = (ObjectNode) rootNode;
                     if (!objNode.has("exampleSentence") || objNode.get("exampleSentence").asText().isEmpty()) {
-                        String fallback = "No example available.";
-                        if (objNode.has("sentence"))
-                            fallback = objNode.get("sentence").asText();
-                        objNode.put("exampleSentence", fallback);
+                        // Fallback strategy: check for other common keys
+                         String fallback = "No example available.";
+                         if (objNode.has("sentence")) fallback = objNode.get("sentence").asText();
+                         objNode.put("exampleSentence", fallback);
                     }
                 }
                 return rootNode;
