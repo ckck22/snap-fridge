@@ -4,7 +4,7 @@
 
 This project transforms your refrigerator inventory into personalized language learning content. By leveraging **Computer Vision** to identify objects and **Generative AI (LLM)** to create context-specific sentences, it bridges the gap between the physical world and language education.
 
-It features an **On-demand Caching System** to optimize performance, reduce latency, and minimize API costs.
+It features an **On-demand Caching System** to optimize performance and a **Gamified Spaced Repetition System** to encourage retention.
 
 ---
 
@@ -13,38 +13,62 @@ It features an **On-demand Caching System** to optimize performance, reduce late
 The core strength of this project is its **Hybrid AI Architecture** combined with a smart caching strategy.
 ```mermaid
 graph LR
-    User[Mobile App] -- 1. Photo & Target Lang --> Server[Spring Boot Backend]
+    User[Mobile App] -- 1. Photo & Lang Prefs --> Server[Spring Boot Backend]
     Server -- 2. Image Analysis --> Vision[Google Cloud Vision API]
-    Vision -- 3. Object Labels --> Server
-    Server -- 4. Check Cache --> DB[(MySQL Database)]
+    Vision -- 3. Raw Labels --> Server
+    
+    subgraph "Intelligent Processing"
+    Server -- 4. Semantic Filtering --> Gemini[Gemini LLM]
+    Gemini -- 5. Best Food Match --> Server
+    Server -- 6. Retrieve Context (Recent Items) --> DB[(MySQL)]
+    end
     
     subgraph "Cache Miss (New Item)"
-    DB -. Not Found .-> Server
-    Server -- 5. Prompt Engineering --> Gemini[Google Gemini LLM]
-    Gemini -- 6. Translation & Example Sentence --> Server
-    Server -- 7. Save Data --> DB
+    DB -. Data Not Found .-> Server
+    Server -- 7. Prompt w/ Context --> Gemini
+    Gemini -- 8. Translation & Contextual Sentence --> Server
+    Server -- 9. Save Data & Image --> DB
     end
     
     subgraph "Cache Hit (Existing Item)"
     DB -- Found Data (0.01s) --> Server
     end
     
-    Server -- 8. JSON Response --> User
+    Server -- 10. JSON Response --> User
 ```
 
 ## 🔑 Key Technical Features
 
-- **Visual Recognition**: Uses Google Cloud Vision API to detect objects from raw camera images (e.g., identifying "Apple" from a photo).
+### 1. 🧠 AI-Driven Logic
 
-- **Generative AI Integration**: Uses Google Gemini (LLM) to dynamically generate translations and context-appropriate example sentences (A1 level) for any detected object.
+- **Visual Recognition**: Uses Google Cloud Vision API to detect objects from raw camera images.
+
+- **Semantic Filtering**: Instead of relying on hardcoded blocklists, the system uses Gemini LLM to intelligently parse Vision API labels and select the most specific food ingredient (e.g., filtering out "Produce" to find "Apple").
+
+- **Context-Aware Generation**: The system remembers items previously scanned (e.g., Milk). When a new item is scanned (e.g., Cookie), the LLM generates a sentence combining them (e.g., "I eat cookies with milk").
+
+### 2. ⚡ Performance & Efficiency
 
 - **On-demand Caching Strategy**: Implements a "Check-DB-First" logic.
-  - **Cache Miss**: Calls the expensive LLM API only when a new word is encountered, then saves the result.
-  - **Cache Hit**: Returns data immediately from MySQL for previously scanned items, ensuring low latency and cost efficiency.
+  - **Cache Miss**: Calls the expensive LLM API only when a new word is encountered.
+  - **Cache Hit**: Returns data immediately from MySQL for previously scanned items, ensuring low latency (~15ms).
 
-- **Text-to-Speech (TTS)**: Integrated audio playback for pronunciation practice using expo-speech.
+- **User Content Hosting**: User-captured photos are saved locally on the server and served back to the app, creating a personalized inventory experience.
 
-- **Smart Filtering**: Post-processing logic to filter out generic labels (e.g., "Food", "Produce") and electronic devices to focus on specific ingredients.
+### 3. 🎮 Gamified Learning (Spaced Repetition)
+
+- **Freshness System**: Items in the fridge have a "Freshness" state based on the Forgetting Curve:
+  - 🌿 **FRESH**: Reviewed recently.
+  - ⚠️ **SOON**: Needs review (3 days).
+  - 💩 **ROTTEN**: Neglected (5+ days, flies appear in UI).
+
+- **Review Mechanism**: Users must review "Rotten" items to restore their freshness and earn XP.
+
+### 4. 🗣️ Interactive UX
+
+- **Text-to-Speech (TTS)**: Integrated audio playback for both words and sentences using expo-speech.
+
+- **Native Language Support**: Supports dual-language learning (e.g., Korean user learning English) by providing definitions in the user's native tongue.
 
 ---
 
@@ -52,8 +76,9 @@ graph LR
 
 ### Frontend (Mobile)
 - **Framework**: React Native (Expo)
-- **Language**: TypeScript / JavaScript
+- **Language**: TypeScript
 - **Network**: Axios
+- **UI Components**: react-native-safe-area-context, Custom Modals, Animated API
 - **Features**: Expo Camera, Expo Speech (TTS)
 
 ### Backend (Server)
@@ -61,11 +86,12 @@ graph LR
 - **Language**: Java 17
 - **Database**: MySQL (JPA/Hibernate)
 - **Build Tool**: Gradle
+- **Static Serving**: WebMvcConfigurer for serving user images.
 - **AI Clients**: Google Cloud Vision SDK, Spring REST Client (for Gemini)
 
 ### AI & Cloud Services
-- **Google Cloud Vision API**: Object detection / Labeling.
-- **Google Gemini API**: LLM for translation and natural language generation.
+- **Google Cloud Vision API**: Object detection.
+- **Google Gemini API (1.5 Flash / Pro)**: Semantic filtering, translation, and natural language generation.
 
 ---
 
@@ -79,7 +105,7 @@ graph LR
 - Google AI Studio API Key (for Gemini)
 
 ### 2. Database Setup
-Create a local MySQL database:
+Create a local MySQL database and the necessary tables. (The application will auto-generate tables via JPA, but ensure the DB exists).
 ```sql
 CREATE DATABASE my_fridge_db;
 ```
@@ -90,9 +116,7 @@ Navigate to the backend directory:
 cd backend
 ```
 
-Add your GCP Service Account Key (`gcp-key.json`) to `src/main/resources/`.
-
-Configure `src/main/resources/application.properties`:
+**Configuration**: Add your GCP Service Account Key (`gcp-key.json`) to `src/main/resources/`. Update `src/main/resources/application.properties`:
 ```properties
 # MySQL Configuration
 spring.datasource.url=jdbc:mysql://localhost:3306/my_fridge_db?serverTimezone=UTC&characterEncoding=UTF-8
@@ -100,7 +124,7 @@ spring.datasource.username=root
 spring.datasource.password=YOUR_DB_PASSWORD
 spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
 
-# JPA Configuration
+# JPA
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
 spring.jpa.database-platform=org.hibernate.dialect.MySQL8Dialect
@@ -110,11 +134,12 @@ spring.cloud.gcp.credentials.location=classpath:gcp-key.json
 
 # Google Gemini
 gemini.api.key=YOUR_GEMINI_API_KEY
-gemini.api.url=https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent
+gemini.api.url=https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:generateContent
 ```
 
-Run the server:
+Create the uploads directory and run:
 ```bash
+mkdir uploads
 ./gradlew bootRun
 ```
 
@@ -129,7 +154,7 @@ Install dependencies:
 npm install
 ```
 
-Update the API URL in `app/(tabs)/index.tsx`:
+Update the API URL in `app/(tabs)/index.tsx` AND `app/(tabs)/fridge.tsx`:
 ```javascript
 // ⚠️ Replace with your computer's local IP address (e.g., 192.168.x.x)
 // Do NOT use 'localhost' if testing on a real device.
@@ -143,25 +168,27 @@ npx expo start
 
 ---
 
-## 📱 Usage
+## 📱 Usage Flow
 
-1. **Select Language**: Choose your target language (Spanish, French, German, Korean, etc.) on the home screen.
+1. **Setup**: Choose your Native Language and Target Language (e.g., Korean -> English).
 
-2. **Snap**: Take a photo of an ingredient in your fridge (e.g., an apple, milk carton).
+2. **Scan**: Take a photo of a food item. The app filters noise and identifies the ingredient.
 
-3. **Learn**: The app displays the detected word, its translation, and a generated example sentence.
+3. **Learn**: View the flashcard with the translated word and a context-aware sentence.
 
-4. **Listen**: Tap the speaker icon (🔊) or the sentence to hear the pronunciation.
+4. **My Fridge**: Go to the "My Fridge" tab to see your inventory.
+
+5. **Review**: Check items marked as ROTTEN (with flies 🪰). Tap to review and restore their freshness!
 
 ---
 
 ## 🔮 Future Improvements
 
-- **Semantic Filtering**: Implementing an LLM-based agent to intelligently select the most relevant food item from Vision API labels, replacing hardcoded blocklists.
+- **Recipe Generation**: Use the collected inventory to generate actual cooking recipes via LLM.
 
-- **Context-Awareness**: Using previous scan history to generate complex sentences that combine multiple ingredients (e.g., "I eat eggs with milk").
+- **Social Leaderboard**: Compete with friends based on "Freshness Score" and XP.
 
-- **User Personalization**: Saving personal vocabulary lists and learning progress.
+- **Nutritional Analysis**: Ask Gemini to provide nutritional facts along with language learning data.
 
 ---
 
