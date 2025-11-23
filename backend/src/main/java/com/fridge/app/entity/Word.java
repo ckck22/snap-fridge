@@ -23,6 +23,9 @@ public class Word extends BaseTimeEntity {
     @Column(name = "name_ko", nullable = false)
     private String nameKo;
 
+    @Column(name = "image_path")
+    private String imagePath;
+
     @OneToMany(mappedBy = "word", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.List<Translation> translations = new java.util.ArrayList<>();
 

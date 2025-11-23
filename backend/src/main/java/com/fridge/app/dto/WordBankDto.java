@@ -13,25 +13,21 @@ public class WordBankDto {
     private final int proficiencyLevel;
     private final boolean needsReview;
     
-    // ✨ [추가] 모국어 뜻 (예: 사과)
-    private final String nativeDefinition; 
-
     private final String languageCode;
     private final String translatedWord;
     private final String exampleSentence;
     private final String emoji;
+    private final String imagePath;
 
     public WordBankDto(LearningProgress progress) {
         this.wordId = progress.getWord().getWordId();
         this.labelEn = progress.getWord().getLabelEn();
         this.proficiencyLevel = progress.getProficiencyLevel();
         this.needsReview = progress.getNextReviewDate().isBefore(LocalDateTime.now());
-        
-        // ✨ [매핑] Word 엔티티에 저장된 nameKo(모국어 뜻)를 가져옵니다.
-        this.nativeDefinition = progress.getWord().getNameKo(); 
+        this.imagePath = progress.getWord().getImagePath();
 
         Translation t = progress.getWord().getTranslations().stream()
-                .max(Comparator.comparing(Translation::getCreatedAt))
+                .max(Comparator.comparing(Translation::getCreatedAt)) 
                 .orElse(null);
 
         if (t != null) {
