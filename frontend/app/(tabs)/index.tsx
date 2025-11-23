@@ -1,256 +1,251 @@
 import { useState, useRef } from 'react';
-import { StyleSheet, Text, View, Button, Image, ActivityIndicator, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, View, Button, Image, ActivityIndicator, ScrollView, SafeAreaView, TouchableOpacity, Dimensions } from 'react-native';
 import { CameraView, useCameraPermissions, CameraCapturedPicture } from 'expo-camera';
 import axios from 'axios';
 import * as Speech from 'expo-speech';
+import { Ionicons } from '@expo/vector-icons';
 
-// --- Type Definitions ---
-interface Translation {
-  languageCode: string;
-  translatedWord: string;
-  exampleSentence: string;
-}
+// --- Data: Supported Languages ---
+const LANGUAGES = [
+  { code: 'en', label: '🇺🇸 English' },
+  { code: 'ko', label: '🇰🇷 Korean' },
+  { code: 'es', label: '🇪🇸 Spanish' },
+  { code: 'ja', label: '🇯🇵 Japanese' },
+  { code: 'zh', label: '🇨🇳 Chinese' },
+  { code: 'fr', label: '🇫🇷 French' },
+  { code: 'de', label: '🇩🇪 German' },
+  { code: 'it', label: '🇮🇹 Italian' },
+  { code: 'pt', label: '🇧🇷 Portuguese' },
+  { code: 'ru', label: '🇷🇺 Russian' },
+];
 
+// ✨ [수정됨] 백엔드 DTO와 일치하는 인터페이스
 interface QuizItem {
   labelEn: string;
-  nameKo: string;
-  translations: Translation[];
+  frontWord: string;    // Native (앞면)
+  backWord: string;     // Target (뒷면)
+  backSentence: string; // Sentence
+  emoji: string;
+  targetLangCode: string;
 }
 
-interface AxiosErrorResponse {
-  response?: {
-    data?: string;
-  };
-  message: string;
-}
+const { width } = Dimensions.get('window');
+const CARD_WIDTH = (width - 40) / 2;
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   
-  // State
   const [photo, setPhoto] = useState<CameraCapturedPicture | null>(null);
   const [loading, setLoading] = useState(false);
   const [quizData, setQuizData] = useState<QuizItem[] | null>(null);
+  
+  const [nativeLang, setNativeLang] = useState<string | null>(null);
   const [targetLang, setTargetLang] = useState<string | null>(null);
+  const [isFlipped, setIsFlipped] = useState(false);
 
-  // Permissions
+  // ⚠️ IP 주소 확인 필수!
+  const API_URL = 'http://192.168.86.237:8080/api/quiz/generate'; 
+
   if (!permission) return <View />;
   if (!permission.granted) {
     return (
-      <View style={styles.container}>
-        <Text style={{ textAlign: 'center', marginTop: 50 }}>We need camera permission</Text>
+      <SafeAreaView style={styles.container}>
         <Button onPress={requestPermission} title="Grant Permission" />
-      </View>
+      </SafeAreaView>
     );
   }
 
-  // --- Actions ---
   const takePicture = async () => {
     if (cameraRef.current) {
       try {
-        const data = await cameraRef.current.takePictureAsync({
-          quality: 0.5,
-          base64: false,
-        });
+        const data = await cameraRef.current.takePictureAsync({ quality: 0.5, base64: false });
         setPhoto(data);
-      } catch (error) {
-        console.error("Failed to take picture:", error);
-      }
+      } catch (error) { console.error(error); }
     }
   };
 
   const generateQuiz = async () => {
-    if (!photo || !targetLang) return;
-
+    if (!photo || !targetLang || !nativeLang) return;
     setLoading(true);
-    const formData = new FormData();
-    formData.append('image', {
-      uri: photo.uri,
-      name: 'fridge.jpg',
-      type: 'image/jpeg',
-    } as any);
     
+    const formData = new FormData();
+    formData.append('image', { uri: photo.uri, name: 'fridge.jpg', type: 'image/jpeg' } as any);
     formData.append('targetLang', targetLang);
+    formData.append('nativeLang', nativeLang);
 
     try {
-      // ⚠️ IP 주소 확인! (http://내컴퓨터IP:8080...)
-      const BACKEND_URL = 'http://192.168.86.25:8080/api/quiz/generate'; 
-      
-      console.log(`Sending to ${BACKEND_URL} with lang=${targetLang}`);
-      
-      const response = await axios.post(BACKEND_URL, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-
-      console.log("📦 Data received:", JSON.stringify(response.data, null, 2));
+      const response = await axios.post(API_URL, formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      console.log("📦 Data:", response.data);
       setQuizData(response.data);
-    } catch (err) {
-      const error = err as AxiosErrorResponse;
-      console.error("Error:", error);
-      alert("Error: " + (error.response?.data || error.message));
+      setIsFlipped(false);
+    } catch (err: any) {
+      alert("Error: " + (err.response?.data || err.message));
     } finally {
       setLoading(false);
     }
   };
 
-  // ✨ [TTS] 듣기 함수 추가
-  const playAudio = (text: string, language: string) => {
-    // 언어 코드 보정 (Google API 언어 코드 -> TTS 언어 코드)
-    // 예: 'ko' -> 'ko-KR', 'en' -> 'en-US'
-    let speechLang = language;
-    if (language === 'ko') speechLang = 'ko-KR';
-    if (language === 'en') speechLang = 'en-US';
-    if (language === 'es') speechLang = 'es-ES';
-    if (language === 'fr') speechLang = 'fr-FR';
-    if (language === 'de') speechLang = 'de-DE';
-
-    Speech.speak(text, {
-      language: speechLang,
-      pitch: 1.0,
-      rate: 0.9,
-    });
+  const playAudio = (text: string, lang: string) => {
+    const map: {[key:string]: string} = { 'ko': 'ko-KR', 'en': 'en-US', 'es': 'es-ES', 'fr': 'fr-FR', 'de': 'de-DE', 'ja': 'ja-JP' };
+    Speech.speak(text, { language: map[lang] || 'en-US' });
   };
 
-  const reset = () => {
-    setPhoto(null);
-    setQuizData(null);
-  };
+  const reset = () => { setPhoto(null); setQuizData(null); };
+  const fullReset = () => { setTargetLang(null); setNativeLang(null); reset(); };
 
-  const goBackToHome = () => {
-    setTargetLang(null);
-    reset();
-  };
+  const renderLanguageButtons = (onPress: (code: string) => void) => (
+    <View style={styles.grid}>
+      {LANGUAGES.map((lang) => (
+        <TouchableOpacity key={lang.code} style={styles.gridBtn} onPress={() => onPress(lang.code)}>
+          <Text style={styles.gridBtnText}>{lang.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
 
-  // --- Render ---
-
-  // 1. Language Selection
-  if (!targetLang) {
+  // Step 1
+  if (!nativeLang) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.centerContent}>
-          <Text style={styles.header}>🌍 Choose Language</Text>
-          <Text style={styles.subHeader}>What do you want to learn?</Text>
-          
-          <View style={styles.langButtonContainer}>
-            <Button title="🇪🇸 Spanish" onPress={() => setTargetLang('es')} />
-            <View style={{height: 10}} />
-            <Button title="🇫🇷 French" onPress={() => setTargetLang('fr')} />
-            <View style={{height: 10}} />
-            <Button title="🇩🇪 German" onPress={() => setTargetLang('de')} />
-            <View style={{height: 10}} />
-            <Button title="🇰🇷 Korean" onPress={() => setTargetLang('ko')} />
-            <View style={{height: 10}} />
-            <Button title="🇺🇸 English" onPress={() => setTargetLang('en')} />
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // 3. Result Screen (Flashcards)
-  if (quizData) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.resultContainer}>
-          <Text style={styles.header}>✨ Learning Time ✨</Text>
-          {quizData.map((item, index) => (
-            <View key={index} style={styles.card}>
-              <Text style={styles.labelEn}>{item.labelEn}</Text>
-              <View style={styles.separator} />
-              
-              {item.translations.map((t, tIndex) => (
-                <View key={tIndex}>
-                  <View style={styles.translationRow}>
-                    <Text style={styles.translation}>
-                      {t.languageCode.toUpperCase()}: {t.translatedWord}
-                    </Text>
-                    <TouchableOpacity 
-                      onPress={() => playAudio(t.translatedWord, t.languageCode)}
-                      style={styles.audioButton}
-                    >
-                      <Text style={{fontSize: 20}}>🔊</Text>
-                    </TouchableOpacity>
-                  </View>
-
-                  <TouchableOpacity onPress={() => playAudio(t.exampleSentence, t.languageCode)}>
-                    <Text style={styles.sentence}>"{t.exampleSentence}"</Text>
-                    <Text style={styles.hint}>(Tap sentence to listen)</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          ))}
-          
-          <View style={styles.buttonGroup}>
-            <Button title="Scan Another Item" onPress={reset} />
-            <View style={{marginTop: 10}}>
-               <Button title="Change Language" onPress={goBackToHome} color="gray" />
-            </View>
-          </View>
+        <ScrollView contentContainerStyle={styles.scrollCenter}>
+          <Text style={styles.header}>Step 1</Text>
+          <Text style={styles.subHeader}>What is your Native Language?</Text>
+          {renderLanguageButtons(setNativeLang)}
         </ScrollView>
       </SafeAreaView>
     );
   }
 
-  // 2. Camera Preview
+  // Step 2
+  if (!targetLang) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ScrollView contentContainerStyle={styles.scrollCenter}>
+          <View style={styles.backBtnContainer}>
+             <TouchableOpacity onPress={() => setNativeLang(null)}><Ionicons name="arrow-back" size={28} color="#333" /></TouchableOpacity>
+          </View>
+          <Text style={styles.header}>Step 2</Text>
+          <Text style={styles.subHeader}>What do you want to learn?</Text>
+          {renderLanguageButtons(setTargetLang)}
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+
+  // Step 4: Result (Flashcard)
+  if (quizData && quizData.length > 0) {
+    const item = quizData[0]; // ✨ map() 대신 첫 번째 아이템 사용
+
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.cardContainer}>
+          <Text style={styles.header}>✨ Flashcard ✨</Text>
+          
+          <TouchableOpacity 
+            activeOpacity={0.9} 
+            onPress={() => setIsFlipped(!isFlipped)} 
+            style={[styles.flashcard, isFlipped ? styles.cardBack : styles.cardFront]}
+          >
+            {!isFlipped ? (
+              // [FRONT] Native Language
+              <View style={styles.cardContent}>
+                {photo && <Image source={{ uri: photo.uri }} style={styles.cardImage} />}
+                {/* ✨ 이모지 + 모국어 단어 */}
+                <Text style={styles.emoji}>{item.emoji}</Text>
+                <Text style={styles.frontText}>{item.frontWord}</Text>
+                <Text style={styles.tapHint}>👆 Tap to Flip</Text>
+              </View>
+            ) : (
+              // [BACK] Target Language
+              <View style={styles.cardContent}>
+                <Text style={styles.backTitle}>{targetLang.toUpperCase()}</Text>
+                {/* ✨ 학습 언어 단어 */}
+                <Text style={styles.backWord}>{item.backWord}</Text>
+                <TouchableOpacity style={styles.audioBtn} onPress={() => playAudio(item.backWord, item.targetLangCode)}>
+                   <Text>🔊 Listen Word</Text>
+                </TouchableOpacity>
+
+                <View style={styles.divider}/>
+                
+                {/* ✨ 예문 */}
+                <Text style={styles.sentence}>"{item.backSentence}"</Text>
+                <TouchableOpacity style={styles.audioBtn} onPress={() => playAudio(item.backSentence, item.targetLangCode)}>
+                   <Text>🔊 Listen Sentence</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </TouchableOpacity>
+
+          <Button title="Scan Another Item" onPress={reset} />
+          <Button title="Change Languages" onPress={fullReset} color="gray" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  // Step 3: Camera
   if (photo) {
     return (
       <View style={styles.container}>
         <Image source={{ uri: photo.uri }} style={styles.preview} />
-        <View style={styles.controls}>
-          {loading ? (
-            <ActivityIndicator size="large" color="#0000ff" />
-          ) : (
-            <>
-              <Button title="Retake" onPress={() => setPhoto(null)} />
-              <Button title={`Generate (${targetLang?.toUpperCase()})`} onPress={generateQuiz} />
-            </>
+        <View style={styles.overlay}>
+          {loading ? <ActivityIndicator size="large" color="#fff" /> : (
+            <View style={styles.row}>
+              <Button title="Retake" onPress={() => setPhoto(null)} color="#ff4444" />
+              <View style={{width:20}}/>
+              <Button title={`Generate (${nativeLang?.toUpperCase()} -> ${targetLang?.toUpperCase()})`} onPress={generateQuiz} color="#44ff44" />
+            </View>
           )}
         </View>
       </View>
     );
   }
 
-  // Live Camera
   return (
     <View style={styles.container}>
-      <CameraView style={styles.camera} ref={cameraRef}>
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button} onPress={takePicture}>
-            <Text style={styles.text}>📸 SNAP</Text>
-          </TouchableOpacity>
-        </View>
-      </CameraView>
-      <SafeAreaView style={{backgroundColor: 'transparent'}}>
-         <Button title="Back to Language" onPress={() => setTargetLang(null)} color="white" />
-      </SafeAreaView>
+      <CameraView style={StyleSheet.absoluteFill} ref={cameraRef} />
+      <View style={styles.cameraControls}>
+        <SafeAreaView style={styles.topBar}>
+           <Button title="Back" onPress={() => setTargetLang(null)} color="white" />
+        </SafeAreaView>
+        <TouchableOpacity style={styles.snapBtn} onPress={takePicture}>
+          <View style={styles.innerSnap} />
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  camera: { flex: 1 },
-  buttonContainer: { flex: 1, flexDirection: 'row', backgroundColor: 'transparent', margin: 64 },
-  button: { flex: 1, alignSelf: 'flex-end', alignItems: 'center', backgroundColor: 'white', padding: 15, borderRadius: 10 },
-  text: { fontSize: 24, fontWeight: 'bold', color: 'black' },
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
+  scrollCenter: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', paddingVertical: 40 },
+  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 10, color: '#333' },
+  subHeader: { fontSize: 16, color: '#666', marginBottom: 20 },
+  emoji: { fontSize: 50, marginBottom: 10 },
+  backBtnContainer: { alignSelf: 'flex-start', marginLeft: 20, marginBottom: 10 },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', width: '100%' },
+  gridBtn: { width: '42%', backgroundColor: 'white', paddingVertical: 15, margin: 8, borderRadius: 15, alignItems: 'center', elevation: 2 },
+  gridBtnText: { fontSize: 16, fontWeight: '600', color: '#333' },
   preview: { flex: 1 },
-  controls: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, paddingBottom: 40 },
-  resultContainer: { padding: 20, paddingBottom: 100, flexGrow: 1, backgroundColor: '#f5f5f5' },
-  header: { fontSize: 28, fontWeight: 'bold', marginBottom: 10, textAlign: 'center', marginTop: 20, color: '#333' },
-  subHeader: { fontSize: 18, color: '#666', marginBottom: 30 },
-  langButtonContainer: { width: '60%' },
-  card: { backgroundColor: '#ffffff', padding: 20, borderRadius: 15, marginBottom: 20, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, elevation: 3, borderWidth: 1, borderColor: '#ddd' },
-  labelEn: { fontSize: 24, fontWeight: 'bold', color: '#333', textAlign: 'center' },
-  separator: { height: 1, backgroundColor: '#eee', marginVertical: 10 },
+  overlay: { position: 'absolute', bottom: 50, width: '100%', alignItems: 'center' },
+  row: { flexDirection: 'row' },
+  cameraControls: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 50 },
+  topBar: { position: 'absolute', top: 20, left: 20 },
+  snapBtn: { width: 70, height: 70, borderRadius: 35, backgroundColor: 'rgba(255,255,255,0.5)', justifyContent: 'center', alignItems: 'center' },
+  innerSnap: { width: 60, height: 60, borderRadius: 30, backgroundColor: 'white' },
   
-  translationRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 5 },
-  translation: { fontSize: 22, color: '#007AFF', fontWeight: '600', textAlign: 'center' },
-  audioButton: { marginLeft: 10, padding: 5, backgroundColor: '#f0f0f0', borderRadius: 20 },
-  
-  sentence: { fontSize: 16, color: '#555', fontStyle: 'italic', textAlign: 'center', marginTop: 5 },
-  hint: { fontSize: 12, color: '#999', textAlign: 'center', marginTop: 2 },
-  buttonGroup: { marginBottom: 30 }
+  cardContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  flashcard: { width: width * 0.85, height: width * 1.1, borderRadius: 20, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 10, elevation: 10, marginBottom: 30 },
+  cardFront: { backgroundColor: '#ffffff' },
+  cardBack: { backgroundColor: '#e8eaf6' },
+  cardContent: { alignItems: 'center', padding: 20, width: '100%' },
+  cardImage: { width: 200, height: 200, borderRadius: 15, marginBottom: 10 },
+  frontText: { fontSize: 40, fontWeight: 'bold', color: '#333' },
+  tapHint: { marginTop: 20, color: '#888', fontSize: 14 },
+  backTitle: { fontSize: 18, color: '#6200ee', fontWeight: 'bold', marginBottom: 10 },
+  backWord: { fontSize: 40, fontWeight: 'bold', color: '#333', marginBottom: 10 },
+  sentence: { fontSize: 22, fontStyle: 'italic', textAlign: 'center', color: '#555', marginBottom: 15, marginTop: 15 },
+  divider: { height: 1, width: '80%', backgroundColor: '#ccc', marginVertical: 10 },
+  audioBtn: { backgroundColor: '#fff', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#6200ee', marginVertical: 5 },
 });

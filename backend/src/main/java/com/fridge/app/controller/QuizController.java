@@ -11,52 +11,38 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.List;
 
-// @RestController: Indicates that this class handles REST API requests and returns JSON.
 @RestController
 @RequestMapping("/api")
-@RequiredArgsConstructor // Automatically injects the final QuizService.
+@RequiredArgsConstructor
 public class QuizController {
 
     private final QuizService quizService;
 
-    /**
-     * Endpoint to generate a quiz from an uploaded image.
-     * * @param imageFile  The photo taken by the user.
-     * @param targetLang The language code the user wants to learn (e.g., "es", "fr", "de").
-     * Defaults to "es" (Spanish) if not provided.
-     */
     @PostMapping("/quiz/generate")
     public ResponseEntity<?> generateQuiz(
             @RequestParam("image") MultipartFile imageFile,
-            @RequestParam(value = "targetLang", defaultValue = "es") String targetLang) {
+            @RequestParam(value = "targetLang", defaultValue = "es") String targetLang,
+            // ✨ [NEW] Added nativeLang parameter
+            @RequestParam(value = "nativeLang", defaultValue = "ko") String nativeLang) {
 
-        // 1. Basic validation: Check if the file is empty.
         if (imageFile.isEmpty()) {
             return ResponseEntity.badRequest().body("Image file is empty.");
         }
 
         try {
-            System.out.println("📷 Received image. Target Language: " + targetLang);
+            System.out.println("📷 Received image. Target: " + targetLang + ", Native: " + nativeLang);
 
-            // 2. Call the Service to process the image and get quiz data.
-            // We pass the 'targetLang' so the service knows what language to ask Gemini for.
-            List<QuizQuestionDto> quiz = quizService.generateQuizFromImage(imageFile, targetLang);
+            // ✨ [FIX] Pass all 3 arguments to the service
+            List<QuizQuestionDto> quiz = quizService.generateQuizFromImage(imageFile, targetLang, nativeLang);
 
-            // 3. Return the list of quiz questions with a 200 OK status.
             return ResponseEntity.ok(quiz);
 
         } catch (IOException e) {
-            // Handle IO errors (e.g., file processing issues).
             e.printStackTrace();
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("Error processing image: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error processing image: " + e.getMessage());
         } catch (Exception e) {
-            // Handle any other unexpected errors.
             e.printStackTrace();
-            return ResponseEntity
-                    .status(HttpStatus.INTERNAL_SERVER_ERROR)
-                    .body("An unexpected error occurred: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("An unexpected error occurred: " + e.getMessage());
         }
     }
 }

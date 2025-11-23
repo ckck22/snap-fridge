@@ -24,22 +24,69 @@ public class GeminiService {
 
     private final ObjectMapper objectMapper;
 
-    public JsonNode getTranslationAndSentence(String word, String targetLang) {
-        String promptText = String.format(
-            "You are a language teacher. Translate '%s' into language code '%s'.\n" +
-            "Create a simple example sentence using the word IN THE TARGET LANGUAGE (%s).\n" +
-            "STRICT JSON OUTPUT format required: { \"translatedWord\": \"...\", \"exampleSentence\": \"...\" }", 
-            word, targetLang, targetLang
-        );
+    /**
+     * [연구 주제 1] Semantic Filtering
+     * Vision API가 준 라벨 중에서 '음식'만 쏙 골라냅니다.
+     */
+    public String extractFoodLabel(List<String> visionLabels) {
+        String labelsString = String.join(", ", visionLabels);
 
+        String promptText = String.format(
+                "Analyze this list of image labels: [%s].\n" +
+                        "Identify the single most specific food ingredient or edible item visible.\n" +
+                        "Ignore general terms like 'Food', 'Produce', 'Dish', 'Ingredient', 'Recipe', 'Cuisine', 'Display device', 'Gadget'.\n"
+                        +
+                        "Return ONLY a JSON object: { \"foodLabel\": \"Name\" } or { \"foodLabel\": null } if none found.",
+                labelsString);
+
+        JsonNode response = callGemini(promptText);
+
+        if (response != null && response.has("foodLabel") && !response.get("foodLabel").isNull()) {
+            return response.get("foodLabel").asText();
+        }
+        return null;
+    }
+
+    /**
+     * [연구 주제 2] Context-Aware Generation
+     * 사용자의 냉장고 속 재료(Context)를 고려해서 예문을 만듭니다.
+     */
+    public JsonNode getTranslationAndSentence(String word, String targetLang, String nativeLang,
+            List<String> contextWords) {
+
+        String contextString = (contextWords == null || contextWords.isEmpty()) ? "None"
+                : String.join(", ", contextWords);
+
+        String promptText = String.format(
+                "You are a language teacher.\n" +
+                        "Vision Label (English): '%s'\n" +
+                        "Student's Native Language: %s\n" +
+                        "Target Language to Learn: %s\n" +
+                        "Context: [%s]\n" +
+                        "\n" +
+                        "Output JSON Requirements:\n" +
+                        "1. nativeDefinition: The word '%s' translated into the Student's Native Language (%s).\n" +
+                        "2. translatedWord: The word '%s' translated into the Target Language (%s).\n" +
+                        "3. exampleSentence: A simple sentence using the word in the Target Language (%s).\n" +
+                        "4. emoji: A matching emoji.\n" +
+                        "\n" +
+                        "Strict JSON: { \"nativeDefinition\": \"...\", \"translatedWord\": \"...\", \"exampleSentence\": \"...\", \"emoji\": \"...\" }",
+                word, nativeLang, targetLang, contextString,
+                word, nativeLang,
+                word, targetLang,
+                targetLang);
+
+        return callGemini(promptText);
+    }
+
+    // Gemini API 호출 공통 메서드
+    private JsonNode callGemini(String promptText) {
         GeminiRequest requestBody = new GeminiRequest(
-            List.of(new GeminiRequest.Content(
-                List.of(new GeminiRequest.Part(promptText))
-            ))
-        );
+                List.of(new GeminiRequest.Content(
+                        List.of(new GeminiRequest.Part(promptText)))));
 
         RestClient restClient = RestClient.create();
-        
+
         try {
             GeminiResponse response = restClient.post()
                     .uri(apiUrl + "?key=" + apiKey)
@@ -49,32 +96,26 @@ public class GeminiService {
 
             if (response != null && !response.getCandidates().isEmpty()) {
                 String jsonString = response.getCandidates().get(0).getContent().getParts().get(0).getText();
-                
-                // ✨ [DEBUG] 이 로그가 반드시 찍혀야 합니다!
                 System.out.println("🤖 Raw Gemini Response: " + jsonString);
 
                 jsonString = jsonString.replaceAll("```json", "").replaceAll("```", "").trim();
                 JsonNode rootNode = objectMapper.readTree(jsonString);
-                
-                // 예문 강제 주입 로직
-                String sentence = "No example available.";
-                if (rootNode.has("exampleSentence")) sentence = rootNode.get("exampleSentence").asText();
-                
-                if (sentence == null || sentence.trim().isEmpty()) {
-                    sentence = "Gemini returned an empty sentence.";
-                }
 
                 if (rootNode instanceof ObjectNode) {
-                    ((ObjectNode) rootNode).put("exampleSentence", sentence);
+                    ObjectNode objNode = (ObjectNode) rootNode;
+                    if (!objNode.has("exampleSentence") || objNode.get("exampleSentence").asText().isEmpty()) {
+                        String fallback = "No example available.";
+                        if (objNode.has("sentence"))
+                            fallback = objNode.get("sentence").asText();
+                        objNode.put("exampleSentence", fallback);
+                    }
                 }
-                
                 return rootNode;
             }
         } catch (Exception e) {
             System.err.println("🚨 Gemini Error: " + e.getMessage());
             e.printStackTrace();
         }
-        
         return null;
     }
 }
