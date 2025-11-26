@@ -1,10 +1,10 @@
-# 🍎 What's in My Refrigerator? - AI Language Learning App
+# 🍎 SnapFridge: Context-Aware AI Language Learning Platform
 
-> **A context-aware language learning application that turns everyday objects into micro-learning opportunities.**
+> **Transforming everyday groceries into personalized micro-learning opportunities using Computer Vision and Generative AI.**
 
-This project transforms your refrigerator inventory into personalized language learning content. By leveraging **Computer Vision** to identify objects and **Generative AI (LLM)** to create context-specific sentences, it bridges the gap between the physical world and language education.
+**SnapFridge** is a full-stack mobile application that bridges the physical world and language education. Unlike static vocabulary apps, it utilizes **Google Cloud Vision** to identify real-world objects and **Google Gemini (LLM)** to generate context-aware sentences and translations in real-time.
 
-It features an **On-demand Caching System** to optimize performance and a **Gamified Spaced Repetition System** to encourage retention.
+It features a robust **On-demand Caching Architecture** to minimize API costs and a **Gamified Spaced Repetition System (SRS)** including a Survival Quiz mode to optimize learning retention.
 
 ---
 
@@ -13,29 +13,28 @@ It features an **On-demand Caching System** to optimize performance and a **Gami
 The core strength of this project is its **Hybrid AI Architecture** combined with a smart caching strategy.
 ```mermaid
 graph LR
-    User[Mobile App] -- 1. Photo & Lang Prefs --> Server[Spring Boot Backend]
-    Server -- 2. Image Analysis --> Vision[Google Cloud Vision API]
-    Vision -- 3. Raw Labels --> Server
+    User[Mobile App] -- "1. Photo & Lang Prefs" --> Server[Spring Boot Backend]
+    Server -- "2. Image Analysis" --> Vision[Google Cloud Vision API]
+    Vision -- "3. Raw Labels" --> Server
     
-    subgraph "Intelligent Processing"
-    Server -- 4. Semantic Filtering --> Gemini[Gemini LLM]
-    Gemini -- 5. Best Food Match --> Server
-    Server -- 6. Retrieve Context (Recent Items) --> DB[(MySQL)]
+    subgraph "Intelligent Processing Engine"
+    Server -- "4. Semantic Filtering" --> Gemini[Gemini LLM]
+    Gemini -- "5. Extract Best Food Label" --> Server
+    Server -- "6. Retrieve Context (Recent Items)" --> DB[(MySQL)]
     end
     
     subgraph "Cache Miss (New Item)"
-    DB -. Data Not Found .-> Server
-    Server -- 7. Prompt w/ Context --> Gemini
-    Gemini -- 8. Translation & Contextual Sentence --> Server
-    Server -- 9. Save Data & Image --> DB
+    DB -. "Data Not Found" .-> Server
+    Server -- "7. Prompt w/ Context" --> Gemini
+    Gemini -- "8. Translation & Contextual Sentence" --> Server
+    Server -- "9. Save Data & Image" --> DB
     end
     
     subgraph "Cache Hit (Existing Item)"
-    DB -- Found Data (0.01s) --> Server
+    DB -- "Found Data (Latency < 20ms)" --> Server
     end
     
-    Server -- 10. JSON Response --> User
-```
+    Server -- "10. JSON Response" --> User
 
 ## 🔑 Key Technical Features
 
@@ -62,7 +61,9 @@ graph LR
   - ⚠️ **SOON**: Needs review (3 days).
   - 💩 **ROTTEN**: Neglected (5+ days, flies appear in UI).
 
-- **Survival Quiz Mode**: To restore a "Rotten" item, users must pass a dynamically generated 3-choice quiz. The backend randomly selects distractors from the user's inventory to create challenging questions.
+- **Survival Quiz Mode**: To restore a "Rotten" item, users must pass a dynamically generated 3-choice quiz. The backend randomly selects distractors from the user's inventory to create challenging questions. If users gets the answer, they will get XP.
+
+- **Progression System (Level Up)**: As they accumulate XP, they **level up** their rank (e.g., "Dorm Student" → "Master Chef"), providing intrinsic motivation and a sense of achievement.
 
 - **Analytics Dashboard**: Visualizes user progress with a Donut Chart (Fridge Health) and an XP Progression Bar (Dorm Student → Master Chef).
 
