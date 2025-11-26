@@ -62,7 +62,10 @@ graph LR
   - ⚠️ **SOON**: Needs review (3 days).
   - 💩 **ROTTEN**: Neglected (5+ days, flies appear in UI).
 
-- **Review Mechanism**: Users must review "Rotten" items to restore their freshness and earn XP.
+- **Survival Quiz Mode**: To restore a "Rotten" item, users must pass a dynamically generated 3-choice quiz. The backend randomly selects distractors from the user's inventory to create challenging questions.
+
+- **Analytics Dashboard**: Visualizes user progress with a Donut Chart (Fridge Health) and an XP Progression Bar (Dorm Student → Master Chef).
+
 
 ### 4. 🗣️ Interactive UX
 
@@ -72,13 +75,49 @@ graph LR
 
 ---
 
+## 🗂️ Database Schema
+
+The database is normalized to handle multilingual data efficiently while tracking user learning progress independently.
+```mermaid
+erDiagram
+    WORD {
+        bigint word_id PK
+        varchar label_en
+        varchar name_ko "Native Definition"
+        varchar image_path "User Photo"
+    }
+
+    TRANSLATION {
+        bigint translation_id PK
+        bigint word_id FK
+        varchar language_code
+        varchar translated_word
+        varchar example_sentence
+        varchar emoji
+    }
+
+    LEARNING_PROGRESS {
+        bigint progress_id PK
+        bigint word_id FK
+        int proficiency_level "Lv 1-5"
+        datetime last_reviewed_at "Freshness Logic"
+        datetime next_review_date "SRS Algorithm"
+    }
+
+    WORD ||--o{ TRANSLATION : "1:N"
+    WORD ||--|| LEARNING_PROGRESS : "1:1"
+```
+
+---
+
+
 ## 🛠️ Technology Stack
 
 ### Frontend (Mobile)
 - **Framework**: React Native (Expo)
 - **Language**: TypeScript
 - **Network**: Axios
-- **UI Components**: react-native-safe-area-context, Custom Modals, Animated API
+- **UI Components**: react-native-safe-area-context, react-native-svg (Charts), Animated API
 - **Features**: Expo Camera, Expo Speech (TTS)
 
 ### Backend (Server)
@@ -86,50 +125,12 @@ graph LR
 - **Language**: Java 17
 - **Database**: MySQL (JPA/Hibernate)
 - **Build Tool**: Gradle
-- **Static Serving**: WebMvcConfigurer for serving user images.
-- **AI Clients**: Google Cloud Vision SDK, Spring REST Client (for Gemini)
+- **Optimization**: JPQL Fetch Join
+- **AI Clients**: Google Cloud Vision SDK, Spring REST Client
 
 ### AI & Cloud Services
 - **Google Cloud Vision API**: Object detection.
 - **Google Gemini API (1.5 Flash / Pro)**: Semantic filtering, translation, and natural language generation.
-
----
-
-## 🗂️ Database Architecture
-
-The application uses a relational database design normalized to handle multilingual data and tracking logic efficiently.
-```mermaid
-erDiagram
-    WORD {
-        bigint word_id PK "Primary Key"
-        varchar label_en "English Label (Vision API)"
-        varchar name_ko "Native Definition"
-        varchar image_path "User Image File Path"
-        datetime created_at
-        datetime updated_at
-    }
-
-    TRANSLATION {
-        bigint translation_id PK
-        bigint word_id FK "Foreign Key -> WORD"
-        varchar language_code "Target Lang (es, fr, etc.)"
-        varchar translated_word "Translated Text"
-        varchar example_sentence "Context-Aware Sentence"
-        varchar emoji "Visual Representation"
-    }
-
-    LEARNING_PROGRESS {
-        bigint progress_id PK
-        bigint word_id FK "Foreign Key -> WORD"
-        int proficiency_level "Gamification Level (1-5)"
-        int review_count "Total Reviews"
-        datetime last_reviewed_at "Tracks Freshness State"
-        datetime next_review_date "Calculated via SRS Algorithm"
-    }
-
-    WORD ||--o{ TRANSLATION : "1:N (Supports Multi-Language)"
-    WORD ||--|| LEARNING_PROGRESS : "1:1 (Tracks User Progress)"
-```
 
 ---
 
