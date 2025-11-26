@@ -11,6 +11,7 @@ It features a robust **On-demand Caching Architecture** to minimize API costs an
 ## 🏗️ System Architecture
 
 The core strength of this project is its **Hybrid AI Architecture** combined with a smart caching strategy.
+
 ```mermaid
 graph LR
     User[Mobile App] -- "1. Photo & Lang Prefs" --> Server[Spring Boot Backend]
