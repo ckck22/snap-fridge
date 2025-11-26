@@ -1,16 +1,17 @@
 package com.fridge.app.controller;
 
+import com.fridge.app.dto.QuizOptionsDto;
 import com.fridge.app.dto.WordBankDto;
-import com.fridge.app.entity.LearningProgress;
-import com.fridge.app.repository.LearningProgressRepository;
 import com.fridge.app.service.LearningProgressService;
+import com.fridge.app.entity.LearningProgress; // Import
+import com.fridge.app.repository.LearningProgressRepository; // Import
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map; // Import Map
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/fridge")
@@ -18,31 +19,36 @@ import java.util.Map; // Import Map
 public class FridgeController {
 
     private final LearningProgressService learningProgressService;
-    private final LearningProgressRepository learningProgressRepository; // 간단하게 바로 주입
+    private final LearningProgressRepository learningProgressRepository;
 
+    // 1. 내 냉장고 목록 조회
     @GetMapping("/items")
     public ResponseEntity<List<WordBankDto>> getMyFridge() {
         return ResponseEntity.ok(learningProgressService.getMyFridgeItems());
     }
 
-    // ✨ [New] 복습 완료 API
+    // 2. 복습 완료 처리 (I Memorized This)
     @PostMapping("/review/{wordId}")
     public ResponseEntity<?> reviewWord(@PathVariable Long wordId) {
-        // 1. 해당 단어의 진도 데이터를 찾음
-        // (실무에선 Service로 빼는 게 좋지만, 지금은 빠르게 Controller에서 처리)
         LearningProgress progress = learningProgressRepository.findAll().stream()
                 .filter(p -> p.getWord().getWordId().equals(wordId))
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Word not found"));
 
-        // 2. 상태 업데이트 (싱싱하게 만들기)
         progress.setReviewCount(progress.getReviewCount() + 1);
-        progress.setProficiencyLevel(Math.min(progress.getProficiencyLevel() + 1, 5)); // 최대 레벨 5
-        progress.setLastReviewedAt(LocalDateTime.now()); // 방금 공부함!
+        progress.setProficiencyLevel(Math.min(progress.getProficiencyLevel() + 1, 5));
+        progress.setLastReviewedAt(LocalDateTime.now());
         
-        // 3. 저장
         learningProgressRepository.save(progress);
 
         return ResponseEntity.ok().body(Map.of("message", "Reviewed successfully!"));
+    }
+
+    // ✨✨✨ [이게 없어서 에러가 난 겁니다!] ✨✨✨
+    // 3. 퀴즈 데이터 요청 (Survival Quiz)
+    @GetMapping("/quiz-by-word/{wordId}")
+    public ResponseEntity<QuizOptionsDto> getSurvivalQuizByWord(@PathVariable Long wordId) {
+        // 서비스에게 퀴즈 만들어오라고 시킴
+        return ResponseEntity.ok(learningProgressService.generateSurvivalQuizByWord(wordId));
     }
 }

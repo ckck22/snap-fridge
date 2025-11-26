@@ -26,25 +26,22 @@ public class GeminiService {
 
     /**
      * 1. Semantic Filtering (Smart Labeling)
-     * Picks the best food name from Vision API labels.
-     * ✨ UPDATED: Now instructs AI to avoid botanical names (e.g., Cruciferous) 
-     * and prefer common grocery names (e.g., Cabbage).
+     * 식재료 이름만 깔끔하게 추출하는 로직 (여기는 정확성이 중요하므로 페르소나 변경 X)
      */
-    public String extractFoodLabel(List<String> visionLabels) {
+public String extractFoodLabel(List<String> visionLabels) {
         String labelsString = String.join(", ", visionLabels);
         
+        // ✨ [수정] 페르소나: "마트 직원" / 목표: "가격표 붙이기"
         String promptText = String.format(
-            "Analyze this list of image labels from Google Vision: [%s].\n" +
-            "Your Goal: Identify the single most specific 'Common Grocery Store Item Name'.\n" +
+            "Analyze this list of image labels: [%s].\n" +
+            "Role: You are a grocery store inventory manager.\n" +
+            "Task: Choose the specific item name to print on a Price Tag.\n" +
             "\n" +
             "RULES:\n" +
-            "1. Ignore generic terms like 'Food', 'Produce', 'Vegetable', 'Ingredient', 'Dish', 'Recipe'.\n" +
-            "2. 🚫 STRICTLY AVOID botanical families or scientific categories.\n" +
-            "   - Example: Do NOT use 'Cruciferous vegetables', use 'Cabbage' or 'Broccoli'.\n" +
-            "   - Example: Do NOT use 'Citrus', use 'Lemon' or 'Orange'.\n" +
-            "   - Example: Do NOT use 'Nightshade', use 'Tomato'.\n" +
-            "3. If multiple specific items are listed, pick the most prominent one.\n" +
-            "4. If no food is found, return null.\n" +
+            "1. 🚫 IGNORE broad categories: 'Food', 'Produce', 'Vegetable', 'Fruit', 'Leaf vegetable', 'Root vegetable', 'Natural foods'.\n" +
+            "2. 🚫 IGNORE botanical/scientific names: 'Brassica', 'Cruciferous vegetables', 'Flowering plant'.\n" +
+            "3. ✅ SELECT the specific product name: e.g., use 'Cabbage' instead of 'Leaf vegetable', use 'Carrot' instead of 'Root vegetable'.\n" +
+            "4. If the specific name is missing in the list, infer the most likely specific food item based on the available labels.\n" +
             "\n" +
             "Return ONLY a JSON object: { \"foodLabel\": \"Name\" } or { \"foodLabel\": null }.", 
             labelsString
@@ -60,7 +57,7 @@ public class GeminiService {
 
     /**
      * 2. Content Generation (Translation, Definition, Contextual Sentence)
-     * Uses user's native language and context items to create rich content.
+     * ✨ [Updated Persona] 친절한 선생님/엄마가 아이에게 가르쳐주는 톤앤매너 적용
      */
     public JsonNode getTranslationAndSentence(String word, String targetLang, String nativeLang, List<String> contextWords) {
         
@@ -68,8 +65,9 @@ public class GeminiService {
             ? "None" 
             : String.join(", ", contextWords);
 
+        // ✨ [프롬프트 수정] "Kind Parent/Teacher" 페르소나 주입
         String promptText = String.format(
-            "You are a professional language teacher.\n" +
+            "Role: You are a kind and patient teacher or parent explaining ingredients to a young child.\n" +
             "User's Native Language: %s\n" +
             "Target Language to Learn: %s\n" +
             "Word to analyze: '%s'\n" +
@@ -77,9 +75,12 @@ public class GeminiService {
             "\n" +
             "Task: Provide the following in JSON format:\n" +
             "1. translatedWord: The word translated into the Target Language. (If Target is same as Word, keep it).\n" +
-            "2. nativeDefinition: The meaning of the word in the User's Native Language (%s).\n" +
-            "3. exampleSentence: A simple A1-level sentence in the Target Language (%s).\n" +
-            "   - Try to combine with context items ([%s]) if natural.\n" +
+            "2. nativeDefinition: The SIMPLEST common name in the User's Native Language (%s).\n" +
+            "   - Keep it direct (e.g., 'Egg' -> '계란'). Do not use complex definitions.\n" +
+            "3. exampleSentence: A short, cute, and easy sentence (A1 level) in the Target Language (%s).\n" +
+            "   - Tone: Warm, encouraging, and simple (like talking to a kid).\n" +
+            "   - Use simple verbs like 'eat', 'like', 'yummy', 'cook'.\n" +
+            "   - Try to combine with context items ([%s]) if it makes a yummy food combination.\n" +
             "   - MUST NOT be empty.\n" +
             "4. emoji: A single representative emoji.\n" +
             "\n" +

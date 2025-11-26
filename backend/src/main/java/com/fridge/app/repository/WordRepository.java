@@ -13,4 +13,7 @@ public interface WordRepository extends JpaRepository<Word, Long> {
 
     @Query(value = "SELECT * FROM word ORDER BY created_at DESC LIMIT 3", nativeQuery = true)
     List<Word> findTop3RecentWords();
+    
+    @Query(value = "SELECT * FROM word WHERE word_id != ?1 ORDER BY RAND() LIMIT ?2", nativeQuery = true)
+    List<Word> findRandomWords(Long excludeId, int limit);
 }
