@@ -11,7 +11,6 @@ It features a robust **On-demand Caching Architecture** to minimize API costs an
 ## 🏗️ System Architecture
 
 The core strength of this project is its **Hybrid AI Architecture** combined with a smart caching strategy.
-
 ```mermaid
 graph LR
     User[Mobile App] -- "1. Photo & Lang Prefs" --> Server[Spring Boot Backend]
@@ -36,6 +35,9 @@ graph LR
     end
     
     Server -- "10. JSON Response" --> User
+```
+
+---
 
 ## 🔑 Key Technical Features
 
@@ -67,7 +69,6 @@ graph LR
 - **Progression System (Level Up)**: As they accumulate XP, they **level up** their rank (e.g., "Dorm Student" → "Master Chef"), providing intrinsic motivation and a sense of achievement.
 
 - **Analytics Dashboard**: Visualizes user progress with a Donut Chart (Fridge Health) and an XP Progression Bar (Dorm Student → Master Chef).
-
 
 ### 4. 🗣️ Interactive UX
 
@@ -112,7 +113,6 @@ erDiagram
 
 ---
 
-
 ## 🛠️ Technology Stack
 
 ### Frontend (Mobile)
@@ -135,7 +135,6 @@ erDiagram
 - **Google Gemini API (1.5 Flash / Pro)**: Semantic filtering, translation, and natural language generation.
 
 ---
-
 
 ## 🚀 Getting Started
 
