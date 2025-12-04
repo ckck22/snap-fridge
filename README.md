@@ -10,7 +10,9 @@ It features a robust **On-demand Caching Architecture** to minimize API costs an
 
 ## 📱 Demo Video
 
-[![SnapFridge Demo](https://img.youtube.com/vi/1gWdGNhjI2c/maxresdefault.jpg)](https://youtu.be/1gWdGNhjI2c)
+<a href="https://youtu.be/1gWdGNhjI2c">
+  <img src="https://img.youtube.com/vi/1gWdGNhjI2c/0.jpg" alt="SnapFridge Demo" width="600">
+</a>
 
 *Click the image above to watch the full demo!*
 
