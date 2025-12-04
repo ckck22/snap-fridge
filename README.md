@@ -8,6 +8,14 @@ It features a robust **On-demand Caching Architecture** to minimize API costs an
 
 ---
 
+## 📱 Demo Video
+
+[![SnapFridge Demo](https://img.youtube.com/vi/1gWdGNhjI2c/maxresdefault.jpg)](https://youtu.be/1gWdGNhjI2c)
+
+*Click the image above to watch the full demo!*
+
+---
+
 ## 🏗️ System Architecture
 
 The core strength of this project is its **Hybrid AI Architecture** combined with a smart caching strategy.
