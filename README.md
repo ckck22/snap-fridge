@@ -10,11 +10,18 @@ It features a robust **On-demand Caching Architecture** to minimize API costs an
 
 ## 📱 Demo Video
 
-<a href="https://youtu.be/1gWdGNhjI2c">
-  <img src="https://img.youtube.com/vi/1gWdGNhjI2c/0.jpg" alt="SnapFridge Demo" width="600">
-</a>
+<p align="center">
+  <a href="https://youtu.be/1gWdGNhjI2c">
+    <img src="https://img.shields.io/badge/▶️_Watch_Demo-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch Demo">
+  </a>
+</p>
 
-*Click the image above to watch the full demo!*
+**🎥 [Click here to watch the full demo on YouTube](https://youtu.be/1gWdGNhjI2c)**
+
+The demo showcases:
+- 📸 Object detection and language learning flow
+- 🎮 Gamified freshness system with survival quiz  
+- 📊 Analytics dashboard and XP progression
 
 ---
 
